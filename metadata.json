@@ -1,0 +1,8 @@
+{
+  "name": "Fullscreen Spaces",
+  "description": "Creates and manages dedicated workspaces for applications entering fullscreen mode",
+  "uuid": "fullscreen-space@singher.co.il",
+  "shell-version": [
+    "47"
+  ]
+}
