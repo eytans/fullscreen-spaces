@@ -1,0 +1,4 @@
+.direnv/
+dist/
+*.zip
+node_modules/
