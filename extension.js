@@ -12,7 +12,8 @@ const Extension = GObject.registerClass({
     constructor(constructProperties = {}) {
         super(constructProperties);
         this._handles = [];
-        this._previousWorkspace = {};
+        // Store both the previous workspace index and the monitor the window was on
+        this._windowState = {};
     }
 
     maximize(act) {
@@ -26,7 +27,13 @@ const Extension = GObject.registerClass({
             return;
         }
 
-        this._previousWorkspace[win.get_id()] = global.workspace_manager.get_active_workspace_index();
+        const windowId = win.get_id();
+        
+        // Store both the previous workspace and the monitor the window is on
+        this._windowState[windowId] = {
+            workspace: global.workspace_manager.get_active_workspace_index(),
+            monitor: win.get_monitor(),
+        };
         
         // Create new workspace if needed
         let lastworkspace = global.workspace_manager.n_workspaces - 1;
@@ -51,19 +58,19 @@ const Extension = GObject.registerClass({
         }
 
         const windowId = win.get_id();
-        let previous = this._previousWorkspace[windowId];
+        const state = this._windowState[windowId];
         
-        if (previous == null || previous === undefined) {
+        if (state == null) {
             return;
         }
 
-        delete this._previousWorkspace[windowId];
+        delete this._windowState[windowId];
 
         // Move window back to original workspace
-        win.change_workspace_by_index(previous, true);
+        win.change_workspace_by_index(state.workspace, true);
         
         // Activate the original workspace
-        let previousWorkspace = global.workspace_manager.get_workspace_by_index(previous);
+        let previousWorkspace = global.workspace_manager.get_workspace_by_index(state.workspace);
         if (previousWorkspace) {
             previousWorkspace.activate(global.get_current_time());
         }
@@ -78,12 +85,7 @@ const Extension = GObject.registerClass({
     enable() {
         this._handles.push(
             global.window_manager.connect('size-change', (_, act, change) => {
-                let display = global.display;
                 if (!act.meta_window) return;
-                
-                // Check if window is on primary monitor
-                let win = act.meta_window;
-                if (display.get_primary_monitor() !== win.get_monitor()) return;
 
                 if (change === Meta.SizeChange.FULLSCREEN) {
                     this.maximize(act);
@@ -95,11 +97,31 @@ const Extension = GObject.registerClass({
 
         this._handles.push(
             global.window_manager.connect('destroy', (_, act) => {
-                if (act.meta_window && this._previousWorkspace[act.meta_window.get_id()]) {
+                if (act.meta_window && this._windowState[act.meta_window.get_id()]) {
                     this.unmaximize(act);
                 }
             })
         );
+
+        // Handle monitor configuration changes (connect/disconnect)
+        this._monitorChangedId = global.display.connect('monitors-changed', () => {
+            this._onMonitorsChanged();
+        });
+    }
+
+    _onMonitorsChanged() {
+        // When monitors change, clean up state for windows that may have moved
+        // to different monitors or whose original monitor no longer exists
+        const numMonitors = global.display.get_n_monitors();
+        
+        for (const windowId in this._windowState) {
+            const state = this._windowState[windowId];
+            // If the stored monitor index is now out of bounds, 
+            // update it to a valid monitor (primary)
+            if (state.monitor >= numMonitors) {
+                state.monitor = global.display.get_primary_monitor();
+            }
+        }
     }
 
     disable() {
@@ -109,7 +131,13 @@ const Extension = GObject.registerClass({
             }
         });
         this._handles = [];
-        this._previousWorkspace = {};
+        
+        if (this._monitorChangedId) {
+            global.display.disconnect(this._monitorChangedId);
+            this._monitorChangedId = null;
+        }
+        
+        this._windowState = {};
     }
 });
 

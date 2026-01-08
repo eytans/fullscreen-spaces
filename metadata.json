@@ -3,6 +3,8 @@
   "description": "Creates and manages dedicated workspaces for applications entering fullscreen mode",
   "uuid": "fullscreen-space@singher.co.il",
   "shell-version": [
-    "47"
+    "47",
+    "48",
+    "49"
   ]
 }
